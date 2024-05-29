@@ -1,0 +1,17 @@
+[package]
+name = "basket-random-multiplayer"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+
+[[bin]]
+name = "basket-random-multiplayer"
+path = "src/main.rs"
+
+[dependencies]
+bevy = "0.13.2"
+bevy_rapier2d = { version = "0.26.0", features = ["debug-render-2d"] }
+
+# [workspace]
+# members = ["crates/*"]
+# resolver = "2"
