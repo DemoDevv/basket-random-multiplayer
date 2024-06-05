@@ -41,19 +41,21 @@ fn setup_physics(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     // create the ground
-    let _ground = commands.spawn(Ground {
-        collider: Collider::cuboid(500.0, 50.0),
-        friction: Friction {
-            coefficient: 0.20,
-            combine_rule: CoefficientCombineRule::Min,
-        },
-        transform: TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)),
-    });
-    // .insert(MaterialMesh2dBundle {
-    //     mesh: Mesh2dHandle(meshes.add(Rectangle::new(1000.0, 100.0))),
-    //     material: materials.add(Color::WHITE),
-    //     ..default()
-    // })
+    let _ground = commands
+        .spawn(Ground {
+            collider: Collider::cuboid(500.0, 50.0),
+            friction: Friction {
+                coefficient: 0.20,
+                combine_rule: CoefficientCombineRule::Min,
+            },
+            transform: TransformBundle::from(Transform::from_xyz(0.0, -100.0, 0.0)),
+        })
+        .insert(MaterialMesh2dBundle {
+            mesh: Mesh2dHandle(meshes.add(Rectangle::new(1000.0, 100.0))),
+            material: materials.add(Color::DARK_GRAY),
+            transform: Transform::from_xyz(0.0, -100.0, 0.0),
+            ..default()
+        });
 
     // create the bouncing ball
     for i in 0..NUMBER_OF_PLAYERS {
@@ -101,7 +103,7 @@ fn setup_physics(
         .insert(GravityScale(0.5))
         .insert(MaterialMesh2dBundle {
             mesh: Mesh2dHandle(meshes.add(Circle { radius: 17.0 })),
-            material: materials.add(Color::rgb(0.7, 0.2, 0.3)),
+            material: materials.add(Color::ORANGE),
             ..default()
         })
         .insert(TransformBundle::from(Transform::from_xyz(0.0, 400.0, 0.0)));
