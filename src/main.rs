@@ -1,12 +1,15 @@
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+};
 use bevy_rapier2d::prelude::*;
 use iyes_perf_ui::{PerfUiCompleteBundle, PerfUiPlugin};
 
-const NUMBER_OF_PLAYERS: i8 = 1;
+const NUMBER_OF_PLAYERS: i8 = 2;
 
 const TARGET_ORIENTATION: f32 = 0.0;
-const K: f32 = 80_000_000.0;
-const TORQUE_ON_COLLIDE: f32 = 5_000_000.0;
+const K: f32 = 200_000_000.0;
+const TORQUE_ON_COLLIDE: f32 = 30_000_000.0;
 
 fn main() {
     App::new()
@@ -34,8 +37,8 @@ fn setup_graphics(mut commands: Commands) {
 
 fn setup_physics(
     mut commands: Commands,
-    // mut meshes: ResMut<Assets<Mesh>>,
-    // mut materials: ResMut<Assets<ColorMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     // create the ground
     let _ground = commands.spawn(Ground {
@@ -53,12 +56,12 @@ fn setup_physics(
     // })
 
     // create the bouncing ball
-    for _i in 0..NUMBER_OF_PLAYERS {
-        // let color = Color::hsl(360. * i as f32 / 3.0, 0.95, 0.7);
+    for i in 0..NUMBER_OF_PLAYERS {
+        let color = Color::hsl(360. * i as f32 / 3.0, 0.95, 0.7);
 
         let player = Player {
             rigid_bodie: RigidBody::Dynamic,
-            collider: Collider::capsule_y(20.0, 15.0),
+            collider: Collider::capsule_y(40.0, 15.0),
             external_impulse: ExternalImpulse { ..default() },
             externel_force: ExternalForce {
                 force: Vec2::new(0.0, 0.0),
@@ -71,28 +74,53 @@ fn setup_physics(
             },
             gravity_scale: GravityScale(0.30),
             active_events: ActiveEvents::COLLISION_EVENTS,
-            transform: TransformBundle::from(
-                Transform::from_xyz(0.0, 400.0, 0.0).with_rotation(Quat::from_rotation_z(0.0)),
-            ),
+            transform: TransformBundle::from(Transform::from_xyz(
+                (i + 1) as f32 * -150.0,
+                400.0,
+                0.0,
+            )),
             is_on_ground: IsOnGround::default(),
         };
 
-        let _entity = commands.spawn(player);
-        // .insert(MaterialMesh2dBundle {
-        //     mesh: Mesh2dHandle(meshes.add(Capsule2d {
-        //         radius: 15.0,
-        //         half_length: 20.0,
-        //     })),
-        //     material: materials.add(color),
-        //     ..default()
-        // });
+        let _entity = commands.spawn(player).insert(MaterialMesh2dBundle {
+            mesh: Mesh2dHandle(meshes.add(Capsule2d {
+                radius: 15.0,
+                half_length: 40.0,
+            })),
+            material: materials.add(color),
+            transform: Transform::from_xyz((i + 1) as f32 * -150.0, 400.0, 0.0),
+            ..default()
+        });
     }
+
+    // faire apparaitre la balle
+    commands
+        .spawn(RigidBody::Dynamic)
+        .insert(Collider::ball(17.0))
+        .insert(Restitution::coefficient(1.1))
+        .insert(GravityScale(0.5))
+        .insert(MaterialMesh2dBundle {
+            mesh: Mesh2dHandle(meshes.add(Circle { radius: 17.0 })),
+            material: materials.add(Color::rgb(0.7, 0.2, 0.3)),
+            ..default()
+        })
+        .insert(TransformBundle::from(Transform::from_xyz(0.0, 400.0, 0.0)));
 }
 
 fn apply_torque(mut rigid_bodies: Query<(&Transform, &mut ExternalForce), With<RigidBody>>) {
     for (transform, mut force) in rigid_bodies.iter_mut() {
         force.torque = K * (TARGET_ORIENTATION - transform.rotation.z);
     }
+}
+
+enum Team {
+    RED(Side),
+    BLEU(Side),
+}
+
+enum Side {
+    LEFT,
+    RIGHT,
 }
 
 #[derive(Debug, Bundle)]
@@ -122,7 +150,10 @@ struct IsOnGround(bool);
 fn detect_player_collide_with_ground(
     mut collision_events: EventReader<CollisionEvent>,
     grounds_q: Query<Entity, With<Friction>>,
-    mut entities_q: Query<(Entity, &mut ExternalImpulse, &mut IsOnGround), With<RigidBody>>,
+    mut entities_q: Query<
+        (Entity, &Transform, &mut ExternalImpulse, &mut IsOnGround),
+        With<RigidBody>,
+    >,
 ) {
     for collision_event in collision_events.read() {
         // FIXME: check if the collison is started with the ground and not another guy
@@ -135,7 +166,7 @@ fn detect_player_collide_with_ground(
             }
 
             // on verifie si il est déjà au sol
-            for (entity, _, is_on_ground) in entities_q.iter_mut() {
+            for (entity, _, _, is_on_ground) in entities_q.iter_mut() {
                 if entity.index() == player.index() {
                     if is_on_ground.0 {
                         return;
@@ -143,11 +174,18 @@ fn detect_player_collide_with_ground(
                 }
             }
 
-            for (entity, mut external_impulse, mut is_on_ground) in entities_q.iter_mut() {
+            for (entity, transform, mut external_impulse, mut is_on_ground) in entities_q.iter_mut()
+            {
                 if entity.index() == player.index() {
-                    // obtenir son angle actuel pour connaitre le sens du torque a appliquer
+                    let direction;
 
-                    external_impulse.torque_impulse = TORQUE_ON_COLLIDE;
+                    if transform.rotation.to_axis_angle().0.z == 0.0 {
+                        direction = 1.0;
+                    } else {
+                        direction = transform.rotation.to_axis_angle().0.z
+                    }
+
+                    external_impulse.torque_impulse = TORQUE_ON_COLLIDE * direction;
                     is_on_ground.0 = true;
                 }
             }
@@ -171,7 +209,7 @@ fn jump_system(
         if keyboard_inputs.just_pressed(KeyCode::Space) && is_on_ground.0 && angle <= 80.0 {
             let up_direction_2d = Vec2::new(up_bodie_direction.x, up_bodie_direction.y);
 
-            let force = up_direction_2d * 10_000_000.0;
+            let force = up_direction_2d * 17_000_000.0;
             impulse.impulse = force;
 
             is_on_ground.0 = false;
