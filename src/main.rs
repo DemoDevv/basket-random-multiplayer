@@ -24,7 +24,14 @@ fn main() {
         .add_systems(Startup, setup_physics)
         .add_systems(
             Update,
-            (detect_player_collide_with_ground, apply_torque, jump_system).chain(),
+            (
+                detect_player_collide_with_ground,
+                detect_player_collide_with_player,
+                apply_torque,
+                jump_system,
+                rotate,
+            )
+                .chain(),
         )
         .run();
 }
@@ -41,7 +48,7 @@ fn setup_physics(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     // create the ground
-    let _ground = commands
+    commands
         .spawn(Ground {
             collider: Collider::cuboid(500.0, 50.0),
             friction: Friction {
@@ -56,6 +63,17 @@ fn setup_physics(
             transform: Transform::from_xyz(0.0, -100.0, 0.0),
             ..default()
         });
+
+    // create the two walls on the side but transparent
+    commands.spawn(Wall {
+        collider: Collider::cuboid(50.0, 200.0),
+        transform: TransformBundle::from(Transform::from_xyz(-550.0, 0.0, 0.0)),
+    });
+
+    commands.spawn(Wall {
+        collider: Collider::cuboid(50.0, 200.0),
+        transform: TransformBundle::from(Transform::from_xyz(550.0, 0.0, 0.0)),
+    });
 
     // create the bouncing ball
     for i in 0..NUMBER_OF_PLAYERS {
@@ -84,15 +102,53 @@ fn setup_physics(
             is_on_ground: IsOnGround::default(),
         };
 
-        let _entity = commands.spawn(player).insert(MaterialMesh2dBundle {
-            mesh: Mesh2dHandle(meshes.add(Capsule2d {
-                radius: 15.0,
-                half_length: 40.0,
-            })),
-            material: materials.add(color),
-            transform: Transform::from_xyz((i + 1) as f32 * -150.0, 400.0, 0.0),
-            ..default()
-        });
+        let entity = commands
+            .spawn(player)
+            .insert(MaterialMesh2dBundle {
+                mesh: Mesh2dHandle(meshes.add(Capsule2d {
+                    radius: 15.0,
+                    half_length: 40.0,
+                })),
+                material: materials.add(color),
+                transform: Transform::from_xyz((i + 1) as f32 * -150.0, 400.0, 0.0),
+                ..default()
+            })
+            .id();
+
+        let squeleton_arm_entity = commands
+            .spawn((
+                TransformBundle::from(Transform::from_xyz(0.0, 17.0, 0.0)),
+                Skeleton,
+            ))
+            .id();
+
+        commands.entity(entity).add_child(squeleton_arm_entity);
+
+        let arm = commands
+            .spawn((
+                Arm {
+                    angle: 0.0,
+                    length: 40.0,
+                },
+                Collider::cuboid(7.0, 40.0),
+                Sensor,
+                TransformBundle::from(Transform::from_xyz(0.0, -40.0, 0.0)),
+                ColliderMassProperties::Mass(0.0),
+            ))
+            .id();
+
+        commands.entity(squeleton_arm_entity).add_child(arm);
+
+        let sensor = commands
+            .spawn((
+                Collider::ball(15.0),
+                Sensor,
+                ColliderMassProperties::Mass(0.0),
+                TransformBundle::from(Transform::from_xyz(0.0, -40.0, 0.0)),
+            ))
+            .id();
+
+        commands.entity(arm).add_child(sensor);
     }
 
     // faire apparaitre la balle
@@ -118,6 +174,8 @@ fn apply_torque(mut rigid_bodies: Query<(&Transform, &mut ExternalForce), With<R
 enum Team {
     RED(Side),
     BLEU(Side),
+    GREEN(Side),
+    YELLOW(Side),
 }
 
 enum Side {
@@ -129,6 +187,12 @@ enum Side {
 struct Ground {
     collider: Collider,
     friction: Friction,
+    transform: TransformBundle,
+}
+
+#[derive(Debug, Bundle)]
+struct Wall {
+    collider: Collider,
     transform: TransformBundle,
 }
 
@@ -146,8 +210,61 @@ struct Player {
     is_on_ground: IsOnGround,
 }
 
+#[derive(Debug, Component)]
+struct Arm {
+    angle: f32,
+    length: f32,
+}
+
+#[derive(Debug, Component)]
+struct Skeleton;
+
 #[derive(Debug, Component, Default)]
 struct IsOnGround(bool);
+
+// fonctionne pas car il faudrait pouvoir tester cela lors du saut
+fn detect_player_collide_with_player(
+    mut collision_events: EventReader<CollisionEvent>,
+    mut entities_q: Query<(Entity, &Transform, &mut IsOnGround), With<RigidBody>>,
+) {
+    // vérifier si un joueur est en collision avec un autre joueur et perpendiculaire à l'autre joueur.
+    for collision_event in collision_events.read() {
+        if let CollisionEvent::Started(player1, player2, _) = collision_event {
+            let up_direction_player_1 = entities_q.iter().find_map(|(entity, transform, _)| {
+                if entity == *player1 {
+                    Some(transform.rotation * Vec3::Y)
+                } else {
+                    None
+                }
+            });
+            let up_direction_player_2 = entities_q.iter().find_map(|(entity, transform, _)| {
+                if entity == *player2 {
+                    Some(transform.rotation * Vec3::Y)
+                } else {
+                    None
+                }
+            });
+
+            if up_direction_player_1.is_none() || up_direction_player_2.is_none() {
+                continue;
+            }
+
+            let dot_product = up_direction_player_1
+                .unwrap()
+                .dot(up_direction_player_2.unwrap());
+
+            if dot_product < f32::EPSILON && dot_product > -f32::EPSILON {
+                // set is_on_ground to true
+                // pour le joueur perpendiculaire à l'autre joueur
+                for (entity, _, mut is_on_ground) in entities_q.iter_mut() {
+                    if entity == *player1 && !is_on_ground.0 {
+                        is_on_ground.0 = true;
+                    }
+                }
+            }
+        }
+    }
+}
 
 fn detect_player_collide_with_ground(
     mut collision_events: EventReader<CollisionEvent>,
@@ -216,5 +333,12 @@ fn jump_system(
 
             is_on_ground.0 = false;
         }
+    }
+}
+
+// provisoire juste pour tester la rotation
+fn rotate(time: Res<Time>, mut query: Query<&mut Transform, With<Skeleton>>) {
+    for mut transform in query.iter_mut() {
+        transform.rotate(Quat::from_rotation_z(1.0 * time.delta_seconds()));
     }
 }
