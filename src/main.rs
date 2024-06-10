@@ -5,6 +5,7 @@ use bevy::{
 use bevy_rapier2d::prelude::*;
 use iyes_perf_ui::{PerfUiCompleteBundle, PerfUiPlugin};
 
+const NUMBER_OF_TEAMS: i8 = 2;
 const NUMBER_OF_PLAYERS: i8 = 2;
 
 const TARGET_ORIENTATION: f32 = 0.0;
@@ -50,6 +51,8 @@ fn setup_physics(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
+    commands.insert_resource(TeamScore::default());
+
     // create the ground
     commands
         .spawn(Ground {
@@ -78,89 +81,97 @@ fn setup_physics(
         transform: TransformBundle::from(Transform::from_xyz(550.0, 0.0, 0.0)),
     });
 
-    // create the bouncing ball
-    for i in 0..NUMBER_OF_PLAYERS {
+    for i in 0..NUMBER_OF_TEAMS {
         let color = Color::hsl(360. * i as f32 / 3.0, 0.95, 0.7);
 
-        let player = Player {
-            rigid_bodie: RigidBody::Dynamic,
-            collider: Collider::capsule_y(40.0, 15.0),
-            external_impulse: ExternalImpulse { ..default() },
-            externel_force: ExternalForce {
-                force: Vec2::new(0.0, 0.0),
-                torque: 0.0,
-            },
-            restitution: Restitution::coefficient(0.7),
-            damping: Damping {
-                linear_damping: 1.0,
-                angular_damping: 0.0000000000001,
-            },
-            gravity_scale: GravityScale(0.30),
-            active_events: ActiveEvents::COLLISION_EVENTS,
-            transform: TransformBundle::from(Transform::from_xyz(
-                (i + 1) as f32 * -150.0,
-                400.0,
-                0.0,
-            )),
-            is_on_ground: IsOnGround::default(),
-        };
+        for y in 0..NUMBER_OF_PLAYERS {
+            // posibly optimize this
+            let position = if i == 0 {
+                (y + 1) as f32 * -150.0
+            } else {
+                (y + 1) as f32 * 150.0
+            };
 
-        let entity = commands
-            .spawn(player)
-            .insert(MaterialMesh2dBundle {
-                mesh: Mesh2dHandle(meshes.add(Capsule2d {
-                    radius: 15.0,
-                    half_length: 40.0,
-                })),
-                material: materials.add(color),
-                transform: Transform::from_xyz((i + 1) as f32 * -150.0, 400.0, 0.0),
-                ..default()
-            })
-            .id();
-
-        let squeleton_arm_entity = commands
-            .spawn((
-                TransformBundle::from(Transform::from_xyz(0.0, 17.0, 0.0)),
-                Skeleton,
-                InheritedVisibility::VISIBLE,
-            ))
-            .id();
-
-        commands.entity(entity).add_child(squeleton_arm_entity);
-
-        let arm = commands
-            .spawn((
-                Arm {
-                    angle: 0.0,
-                    length: 40.0,
+            let player = Player {
+                rigid_bodie: RigidBody::Dynamic,
+                collider: Collider::capsule_y(40.0, 15.0),
+                external_impulse: ExternalImpulse { ..default() },
+                externel_force: ExternalForce {
+                    force: Vec2::new(0.0, 0.0),
+                    torque: 0.0,
                 },
-                Collider::cuboid(7.0, 40.0),
-                Sensor,
-                TransformBundle::from(Transform::from_xyz(0.0, -30.0, 0.0)),
-                ColliderMassProperties::Mass(0.0),
-            ))
-            .insert(MaterialMesh2dBundle {
-                mesh: Mesh2dHandle(meshes.add(Rectangle {
-                    half_size: Vec2::new(7.0, 40.0),
-                })),
-                material: materials.add(color),
-                transform: Transform::from_xyz(0.0, -30.0, 0.0),
-                ..default()
-            })
-            .id();
+                restitution: Restitution::coefficient(0.7),
+                damping: Damping {
+                    linear_damping: 1.0,
+                    angular_damping: 0.0000000000001,
+                },
+                gravity_scale: GravityScale(0.30),
+                active_events: ActiveEvents::COLLISION_EVENTS,
+                transform: TransformBundle::from(Transform::from_xyz(
+                    position, // multiplier par -1 pour inverser la position
+                    400.0, 0.0,
+                )),
+                is_on_ground: IsOnGround::default(),
+                side: if i == 0 { Side::LEFT } else { Side::RIGHT },
+            };
 
-        commands.entity(squeleton_arm_entity).add_child(arm);
+            let entity = commands
+                .spawn(player)
+                .insert(MaterialMesh2dBundle {
+                    mesh: Mesh2dHandle(meshes.add(Capsule2d {
+                        radius: 15.0,
+                        half_length: 40.0,
+                    })),
+                    material: materials.add(color),
+                    transform: Transform::from_xyz(position, 400.0, 0.0),
+                    ..default()
+                })
+                .id();
 
-        let sensor = commands
-            .spawn((
-                Collider::ball(15.0),
-                Sensor,
-                ColliderMassProperties::Mass(0.0),
-                TransformBundle::from(Transform::from_xyz(0.0, -40.0, 0.0)),
-            ))
-            .id();
+            let squeleton_arm_entity = commands
+                .spawn((
+                    TransformBundle::from(Transform::from_xyz(0.0, 17.0, 0.0)),
+                    Skeleton,
+                    InheritedVisibility::VISIBLE,
+                ))
+                .id();
 
-        commands.entity(arm).add_child(sensor);
+            commands.entity(entity).add_child(squeleton_arm_entity);
+
+            let arm = commands
+                .spawn((
+                    Arm {
+                        angle: 0.0,
+                        length: 40.0,
+                    },
+                    Collider::cuboid(7.0, 40.0),
+                    Sensor,
+                    TransformBundle::from(Transform::from_xyz(0.0, -30.0, 0.0)),
+                    ColliderMassProperties::Mass(0.0),
+                ))
+                .insert(MaterialMesh2dBundle {
+                    mesh: Mesh2dHandle(meshes.add(Rectangle {
+                        half_size: Vec2::new(7.0, 40.0),
+                    })),
+                    material: materials.add(color),
+                    transform: Transform::from_xyz(0.0, -30.0, 0.0),
+                    ..default()
+                })
+                .id();
+
+            commands.entity(squeleton_arm_entity).add_child(arm);
+
+            let sensor = commands
+                .spawn((
+                    Collider::ball(15.0),
+                    Sensor,
+                    ColliderMassProperties::Mass(0.0),
+                    TransformBundle::from(Transform::from_xyz(0.0, -40.0, 0.0)),
+                ))
+                .id();
+
+            commands.entity(arm).add_child(sensor);
+        }
     }
 
     // faire apparaitre la balle
@@ -183,16 +194,16 @@ fn apply_torque(mut rigid_bodies: Query<(&Transform, &mut ExternalForce), With<R
     }
 }
 
-enum Team {
-    RED(Side),
-    BLEU(Side),
-    GREEN(Side),
-    YELLOW(Side),
-}
-
+#[derive(Debug, Component)]
 enum Side {
     LEFT,
     RIGHT,
+}
+
+#[derive(Resource, Default)]
+struct TeamScore {
+    left: u8,
+    right: u8,
 }
 
 #[derive(Debug, Bundle)]
@@ -220,6 +231,7 @@ struct Player {
     active_events: ActiveEvents,
     transform: TransformBundle,
     is_on_ground: IsOnGround,
+    side: Side,
 }
 
 #[derive(Debug, Component)]
