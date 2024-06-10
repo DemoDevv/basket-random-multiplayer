@@ -10,6 +10,9 @@ const NUMBER_OF_PLAYERS: i8 = 2;
 const TARGET_ORIENTATION: f32 = 0.0;
 const K: f32 = 200_000_000.0;
 const TORQUE_ON_COLLIDE: f32 = 30_000_000.0;
+const MAX_ANGLE_ROTATION_FOR_ARM: f32 = 155.0;
+const MIN_ANGLE_ROTATION_FOR_ARM: f32 = 1.0;
+const SPEED_ROTATION: f32 = 6.3;
 
 fn main() {
     App::new()
@@ -29,7 +32,7 @@ fn main() {
                 detect_player_collide_with_player,
                 apply_torque,
                 jump_system,
-                rotate,
+                rotate_arms,
             )
                 .chain(),
         )
@@ -119,6 +122,7 @@ fn setup_physics(
             .spawn((
                 TransformBundle::from(Transform::from_xyz(0.0, 17.0, 0.0)),
                 Skeleton,
+                InheritedVisibility::VISIBLE,
             ))
             .id();
 
@@ -132,9 +136,17 @@ fn setup_physics(
                 },
                 Collider::cuboid(7.0, 40.0),
                 Sensor,
-                TransformBundle::from(Transform::from_xyz(0.0, -40.0, 0.0)),
+                TransformBundle::from(Transform::from_xyz(0.0, -30.0, 0.0)),
                 ColliderMassProperties::Mass(0.0),
             ))
+            .insert(MaterialMesh2dBundle {
+                mesh: Mesh2dHandle(meshes.add(Rectangle {
+                    half_size: Vec2::new(7.0, 40.0),
+                })),
+                material: materials.add(color),
+                transform: Transform::from_xyz(0.0, -30.0, 0.0),
+                ..default()
+            })
             .id();
 
         commands.entity(squeleton_arm_entity).add_child(arm);
@@ -336,9 +348,25 @@ fn jump_system(
     }
 }
 
-// provisoire juste pour tester la rotation
-fn rotate(time: Res<Time>, mut query: Query<&mut Transform, With<Skeleton>>) {
+// FIXME: verifier le coté du bras avec le vec3 suivant la team des joueurs
+fn rotate_arms(
+    time: Res<Time>,
+    keyboard_inputs: Res<ButtonInput<KeyCode>>,
+    mut query: Query<&mut Transform, With<Skeleton>>,
+) {
     for mut transform in query.iter_mut() {
-        transform.rotate(Quat::from_rotation_z(1.0 * time.delta_seconds()));
+        if keyboard_inputs.pressed(KeyCode::Space)
+            && transform.rotation.to_axis_angle().1.to_degrees() < MAX_ANGLE_ROTATION_FOR_ARM
+        {
+            // lever le bras
+            transform.rotate(Quat::from_rotation_z(SPEED_ROTATION * time.delta_seconds()));
+        } else if !keyboard_inputs.pressed(KeyCode::Space)
+            && transform.rotation.to_axis_angle().1.to_degrees() > MIN_ANGLE_ROTATION_FOR_ARM
+        {
+            // baisser le bras
+            transform.rotate(Quat::from_rotation_z(
+                -SPEED_ROTATION * time.delta_seconds(),
+            ));
+        }
     }
 }
