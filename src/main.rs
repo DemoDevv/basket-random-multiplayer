@@ -5,7 +5,7 @@ use bevy::{
 use bevy_rapier2d::prelude::*;
 use iyes_perf_ui::{PerfUiCompleteBundle, PerfUiPlugin};
 
-const NUMBER_OF_TEAMS: i8 = 2;
+const NUMBER_OF_TEAMS: i8 = 2; // if you set more than 2 teams, you will encounter some bugs with the spawn position of the players
 const NUMBER_OF_PLAYERS: i8 = 2;
 
 const TARGET_ORIENTATION: f32 = 0.0;
@@ -133,6 +133,7 @@ fn setup_physics(
                     TransformBundle::from(Transform::from_xyz(0.0, 17.0, 0.0)),
                     Skeleton,
                     InheritedVisibility::VISIBLE,
+                    if i == 0 { Side::LEFT } else { Side::RIGHT },
                 ))
                 .id();
 
@@ -294,7 +295,13 @@ fn detect_player_collide_with_ground(
     mut collision_events: EventReader<CollisionEvent>,
     grounds_q: Query<Entity, With<Friction>>,
     mut entities_q: Query<
-        (Entity, &Transform, &mut ExternalImpulse, &mut IsOnGround),
+        (
+            Entity,
+            &Transform,
+            &mut ExternalImpulse,
+            &mut IsOnGround,
+            &Side,
+        ),
         With<RigidBody>,
     >,
 ) {
@@ -309,7 +316,7 @@ fn detect_player_collide_with_ground(
             }
 
             // on verifie si il est déjà au sol
-            for (entity, _, _, is_on_ground) in entities_q.iter_mut() {
+            for (entity, _, _, is_on_ground, _) in entities_q.iter_mut() {
                 if entity.index() == player.index() {
                     if is_on_ground.0 {
                         return;
@@ -317,13 +324,17 @@ fn detect_player_collide_with_ground(
                 }
             }
 
-            for (entity, transform, mut external_impulse, mut is_on_ground) in entities_q.iter_mut()
+            for (entity, transform, mut external_impulse, mut is_on_ground, side) in
+                entities_q.iter_mut()
             {
                 if entity.index() == player.index() {
                     let direction;
 
                     if transform.rotation.to_axis_angle().0.z == 0.0 {
-                        direction = 1.0;
+                        direction = match side {
+                            Side::LEFT => -1.0,
+                            Side::RIGHT => 1.0,
+                        }
                     } else {
                         direction = transform.rotation.to_axis_angle().0.z
                     }
@@ -364,20 +375,29 @@ fn jump_system(
 fn rotate_arms(
     time: Res<Time>,
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
-    mut query: Query<&mut Transform, With<Skeleton>>,
+    mut query: Query<(&mut Transform, &Side), With<Skeleton>>,
 ) {
-    for mut transform in query.iter_mut() {
+    for (mut transform, side) in query.iter_mut() {
+        let direction;
+
+        match side {
+            Side::LEFT => direction = 1.0,
+            Side::RIGHT => direction = -1.0,
+        }
+
         if keyboard_inputs.pressed(KeyCode::Space)
             && transform.rotation.to_axis_angle().1.to_degrees() < MAX_ANGLE_ROTATION_FOR_ARM
         {
             // lever le bras
-            transform.rotate(Quat::from_rotation_z(SPEED_ROTATION * time.delta_seconds()));
+            transform.rotate(Quat::from_rotation_z(
+                SPEED_ROTATION * time.delta_seconds() * direction,
+            ));
         } else if !keyboard_inputs.pressed(KeyCode::Space)
             && transform.rotation.to_axis_angle().1.to_degrees() > MIN_ANGLE_ROTATION_FOR_ARM
         {
             // baisser le bras
             transform.rotate(Quat::from_rotation_z(
-                -SPEED_ROTATION * time.delta_seconds(),
+                -SPEED_ROTATION * time.delta_seconds() * direction,
             ));
         }
     }
