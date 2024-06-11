@@ -84,6 +84,8 @@ fn setup_physics(
     for i in 0..NUMBER_OF_TEAMS {
         let color = Color::hsl(360. * i as f32 / 3.0, 0.95, 0.7);
 
+        let side = if i == 0 { Side::LEFT } else { Side::RIGHT };
+
         for y in 0..NUMBER_OF_PLAYERS {
             // posibly optimize this
             let position = if i == 0 {
@@ -112,7 +114,7 @@ fn setup_physics(
                     400.0, 0.0,
                 )),
                 is_on_ground: IsOnGround::default(),
-                side: if i == 0 { Side::LEFT } else { Side::RIGHT },
+                side: side.clone(),
             };
 
             let entity = commands
@@ -128,12 +130,14 @@ fn setup_physics(
                 })
                 .id();
 
+            let arm_x_position = if i == 0 { -1.0 } else { 1.0 };
+
             let squeleton_arm_entity = commands
                 .spawn((
-                    TransformBundle::from(Transform::from_xyz(0.0, 17.0, 0.0)),
+                    TransformBundle::from(Transform::from_xyz(7.0 * arm_x_position, 17.0, 0.0)),
                     Skeleton,
                     InheritedVisibility::VISIBLE,
-                    if i == 0 { Side::LEFT } else { Side::RIGHT },
+                    side.clone(),
                 ))
                 .id();
 
@@ -195,7 +199,7 @@ fn apply_torque(mut rigid_bodies: Query<(&Transform, &mut ExternalForce), With<R
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Clone)]
 enum Side {
     LEFT,
     RIGHT,
