@@ -58,6 +58,7 @@ fn setup_physics(
         .spawn(Ground {
             collider: Collider::cuboid(500.0, 50.0),
             friction: Friction {
+                // FIXME: don't add friction with the ball
                 coefficient: 0.20,
                 combine_rule: CoefficientCombineRule::Min,
             },
@@ -80,6 +81,21 @@ fn setup_physics(
         collider: Collider::cuboid(50.0, 200.0),
         transform: TransformBundle::from(Transform::from_xyz(550.0, 0.0, 0.0)),
     });
+
+    // create the two hoops on the two sides
+
+    for i in 0..2 {
+        commands.spawn(Hoop {
+            collider: Collider::cuboid(30.0, 10.0),
+            side: if i == 0 { Side::LEFT } else { Side::RIGHT },
+            sensor: Sensor,
+            transform: TransformBundle::from(Transform::from_xyz(
+                if i == 0 { -400.0 } else { 400.0 },
+                200.0,
+                0.0,
+            )),
+        });
+    }
 
     for i in 0..NUMBER_OF_TEAMS {
         let color = Color::hsl(360. * i as f32 / 3.0, 0.95, 0.7);
@@ -221,6 +237,14 @@ struct Ground {
 #[derive(Debug, Bundle)]
 struct Wall {
     collider: Collider,
+    transform: TransformBundle,
+}
+
+#[derive(Debug, Bundle)]
+struct Hoop {
+    collider: Collider,
+    sensor: Sensor,
+    side: Side,
     transform: TransformBundle,
 }
 
