@@ -14,6 +14,7 @@ const TORQUE_ON_COLLIDE: f32 = 30_000_000.0;
 const MAX_ANGLE_ROTATION_FOR_ARM: f32 = 155.0;
 const MIN_ANGLE_ROTATION_FOR_ARM: f32 = 1.0;
 const SPEED_ROTATION: f32 = 6.3;
+const GRAVITE_SCALE_BALL: f32 = 0.4;
 
 fn main() {
     App::new()
@@ -34,6 +35,7 @@ fn main() {
                 apply_torque,
                 jump_system,
                 rotate_arms,
+                make_shoot,
             )
                 .chain(),
         )
@@ -85,7 +87,8 @@ fn setup_physics(
     // create the two hoops on the two sides
 
     for i in 0..2 {
-        commands.spawn(Hoop {
+        commands.spawn(HoopBundle {
+            hoop: Hoop,
             collider: Collider::cuboid(30.0, 10.0),
             side: if i == 0 { Side::LEFT } else { Side::RIGHT },
             sensor: Sensor,
@@ -110,7 +113,8 @@ fn setup_physics(
                 (y + 1) as f32 * 150.0
             };
 
-            let player = Player {
+            let player = PlayerBundle {
+                player: Player,
                 rigid_bodie: RigidBody::Dynamic,
                 collider: Collider::capsule_y(40.0, 15.0),
                 external_impulse: ExternalImpulse { ..default() },
@@ -198,9 +202,11 @@ fn setup_physics(
     // faire apparaitre la balle
     commands
         .spawn(RigidBody::Dynamic)
+        .insert(Ball)
         .insert(Collider::ball(17.0))
         .insert(Restitution::coefficient(1.1))
-        .insert(GravityScale(0.5))
+        .insert(GravityScale(GRAVITE_SCALE_BALL))
+        .insert(Velocity::linear(Vec2::new(0.0, 0.0)))
         .insert(MaterialMesh2dBundle {
             mesh: Mesh2dHandle(meshes.add(Circle { radius: 17.0 })),
             material: materials.add(Color::ORANGE),
@@ -227,6 +233,9 @@ struct TeamScore {
     right: u8,
 }
 
+#[derive(Debug, Component)]
+struct Ball;
+
 #[derive(Debug, Bundle)]
 struct Ground {
     collider: Collider,
@@ -240,16 +249,24 @@ struct Wall {
     transform: TransformBundle,
 }
 
+#[derive(Debug, Component)]
+struct Hoop;
+
 #[derive(Debug, Bundle)]
-struct Hoop {
+struct HoopBundle {
+    hoop: Hoop,
     collider: Collider,
     sensor: Sensor,
     side: Side,
     transform: TransformBundle,
 }
 
+#[derive(Debug, Component)]
+struct Player;
+
 #[derive(Debug, Bundle)]
-struct Player {
+struct PlayerBundle {
+    player: Player,
     rigid_bodie: RigidBody,
     collider: Collider,
     external_impulse: ExternalImpulse,
@@ -429,4 +446,53 @@ fn rotate_arms(
             ));
         }
     }
+}
+
+fn make_shoot(
+    keyboard_inputs: Res<ButtonInput<KeyCode>>,
+    q_hoops: Query<&Transform, With<Hoop>>,
+    mut q_ball: Query<(&Transform, &mut Velocity), With<Ball>>,
+) {
+    if !keyboard_inputs.just_pressed(KeyCode::ArrowUp) {
+        return;
+    }
+
+    // get the player and the hoop
+    let ball = q_ball.single().0;
+    let hoop = q_hoops.iter().next().unwrap();
+
+    let x_distance = (hoop.translation.x - ball.translation.x).abs();
+
+    let target_position = if x_distance < 150.0 {
+        hoop.translation + Vec3::Y * 70.0 + Vec3::X * 20.0
+    } else {
+        hoop.translation
+    };
+
+    // calculate the distance between the player and the hoop
+    let distance = Vec2::new(
+        target_position.x - ball.translation.x,
+        target_position.y - ball.translation.y,
+    );
+    println!("distance: {:?}", distance);
+
+    let direction = distance.normalize();
+    println!("direction: {:?}", direction);
+
+    let dx = distance.x;
+    let dy = distance.y;
+
+    let angle = dy.atan2(dx) / 2.0 + std::f32::consts::FRAC_PI_4;
+    let tan_angle = angle.tan();
+    println!("angle: {}", angle);
+
+    let speed = ((9.81 * GRAVITE_SCALE_BALL) * (dx).powi(2) * (tan_angle.powi(2) + 1.0)
+        / (2.0 * (dx * tan_angle - dy)))
+        .sqrt()
+        * 14.6;
+    println!("speed: {}", speed);
+
+    let mut velocity = q_ball.single_mut().1;
+    // use the angle to calculate the direction
+    velocity.linvel = Vec2::new(speed * angle.cos(), speed * angle.sin());
 }
