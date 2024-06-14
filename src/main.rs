@@ -2,7 +2,7 @@ use bevy::{
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
-use bevy_rapier2d::prelude::*;
+use bevy_rapier2d::{na::ComplexField, prelude::*};
 use iyes_perf_ui::{PerfUiCompleteBundle, PerfUiPlugin};
 
 const NUMBER_OF_TEAMS: i8 = 2; // if you set more than 2 teams, you will encounter some bugs with the spawn position of the players
@@ -461,10 +461,21 @@ fn make_shoot(
     let ball = q_ball.single().0;
     let hoop = q_hoops.iter().next().unwrap();
 
-    let x_distance = (hoop.translation.x - ball.translation.x).abs();
+    let first_distance = Vec2::new(
+        hoop.translation.x - ball.translation.x,
+        hoop.translation.y - ball.translation.y,
+    );
 
-    let target_position = if x_distance < 150.0 {
-        hoop.translation + Vec3::Y * 70.0 + Vec3::X * 20.0
+    // use the direction of the first distance to know if the player is on the left or right of the hoop
+    let direction = first_distance.normalize();
+
+    // calculate the target position because if the player is too close to the hoop, the ball will be shooted from the side
+    let target_position = if first_distance.x.abs() < 150.0 {
+        if direction.x > 0.0 {
+            hoop.translation + Vec3::Y * 70.0 - Vec3::X * 20.0
+        } else {
+            hoop.translation + Vec3::Y * 70.0 + Vec3::X * 20.0
+        }
     } else {
         hoop.translation
     };
@@ -474,25 +485,19 @@ fn make_shoot(
         target_position.x - ball.translation.x,
         target_position.y - ball.translation.y,
     );
-    println!("distance: {:?}", distance);
-
-    let direction = distance.normalize();
-    println!("direction: {:?}", direction);
 
     let dx = distance.x;
     let dy = distance.y;
 
     let angle = dy.atan2(dx) / 2.0 + std::f32::consts::FRAC_PI_4;
     let tan_angle = angle.tan();
-    println!("angle: {}", angle);
 
+    // calculate the speed of the ball with equation of motion
     let speed = ((9.81 * GRAVITE_SCALE_BALL) * (dx).powi(2) * (tan_angle.powi(2) + 1.0)
         / (2.0 * (dx * tan_angle - dy)))
         .sqrt()
         * 14.6;
-    println!("speed: {}", speed);
 
     let mut velocity = q_ball.single_mut().1;
-    // use the angle to calculate the direction
     velocity.linvel = Vec2::new(speed * angle.cos(), speed * angle.sin());
 }
