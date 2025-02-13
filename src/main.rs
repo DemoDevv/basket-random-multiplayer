@@ -2,7 +2,7 @@ use bevy::{
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
-use bevy_rapier2d::{na::ComplexField, prelude::*};
+use bevy_rapier2d::prelude::*;
 use iyes_perf_ui::{PerfUiCompleteBundle, PerfUiPlugin};
 
 const NUMBER_OF_TEAMS: i8 = 2; // if you set more than 2 teams, you will encounter some bugs with the spawn position of the players
@@ -31,10 +31,10 @@ fn main() {
             Update,
             (
                 detect_player_collide_with_ground,
-                detect_player_collide_with_player,
                 apply_torque,
                 jump_system,
                 rotate_arms,
+                detect_hand_collide_with_ball,
                 make_shoot,
             )
                 .chain(),
@@ -87,17 +87,31 @@ fn setup_physics(
     // create the two hoops on the two sides
 
     for i in 0..2 {
-        commands.spawn(HoopBundle {
-            hoop: Hoop,
-            collider: Collider::cuboid(30.0, 10.0),
-            side: if i == 0 { Side::LEFT } else { Side::RIGHT },
-            sensor: Sensor,
-            transform: TransformBundle::from(Transform::from_xyz(
-                if i == 0 { -400.0 } else { 400.0 },
-                200.0,
-                0.0,
-            )),
-        });
+        let hoop = commands
+            .spawn(HoopBundle {
+                hoop: Hoop,
+                collider: Collider::cuboid(30.0, 10.0),
+                side: if i == 0 { Side::LEFT } else { Side::RIGHT },
+                sensor: Sensor,
+                transform: TransformBundle::from(Transform::from_xyz(
+                    if i == 0 { -400.0 } else { 400.0 },
+                    200.0,
+                    0.0,
+                )),
+            })
+            .id();
+
+        let hoop_back_x_position = if i == 0 { -1.0 } else { 1.0 };
+
+        // make the back of the hoop
+        let hoop_back = commands
+            .spawn((
+                TransformBundle::from(Transform::from_xyz(hoop_back_x_position * 37.0, 40.0, 0.0)),
+                Collider::cuboid(7.0, 40.0),
+            ))
+            .id();
+
+        commands.entity(hoop).add_child(hoop_back);
     }
 
     for i in 0..NUMBER_OF_TEAMS {
@@ -292,46 +306,10 @@ struct Skeleton;
 #[derive(Debug, Component, Default)]
 struct IsOnGround(bool);
 
-// fonctionne pas car il faudrait pouvoir tester cela lors du saut
-fn detect_player_collide_with_player(
-    mut collision_events: EventReader<CollisionEvent>,
-    mut entities_q: Query<(Entity, &Transform, &mut IsOnGround), With<RigidBody>>,
-) {
-    // vérifier si un joueur est en collision avec un autre joueur et perpendiculaire à l'autre joueur.
+fn detect_hand_collide_with_ball(mut collision_events: EventReader<CollisionEvent>) {
     for collision_event in collision_events.read() {
-        if let CollisionEvent::Started(player1, player2, _) = collision_event {
-            let up_direction_player_1 = entities_q.iter().find_map(|(entity, transform, _)| {
-                if entity == *player1 {
-                    Some(transform.rotation * Vec3::Y)
-                } else {
-                    None
-                }
-            });
-            let up_direction_player_2 = entities_q.iter().find_map(|(entity, transform, _)| {
-                if entity == *player2 {
-                    Some(transform.rotation * Vec3::Y)
-                } else {
-                    None
-                }
-            });
-
-            if up_direction_player_1.is_none() || up_direction_player_2.is_none() {
-                continue;
-            }
-
-            let dot_product = up_direction_player_1
-                .unwrap()
-                .dot(up_direction_player_2.unwrap());
-
-            if dot_product < f32::EPSILON && dot_product > -f32::EPSILON {
-                // set is_on_ground to true
-                // pour le joueur perpendiculaire à l'autre joueur
-                for (entity, _, mut is_on_ground) in entities_q.iter_mut() {
-                    if entity == *player1 && !is_on_ground.0 {
-                        is_on_ground.0 = true;
-                    }
-                }
-            }
+        if let CollisionEvent::Started(hand, ball, _) = collision_event {
+            // TODO: fix la balle au bras du joueur et en conséquence choisir le panier target du joueur
         }
     }
 }
@@ -351,7 +329,6 @@ fn detect_player_collide_with_ground(
     >,
 ) {
     for collision_event in collision_events.read() {
-        // FIXME: check if the collison is started with the ground and not another guy
         if let CollisionEvent::Started(ground_c, player, _) = collision_event {
             for ground in grounds_q.iter() {
                 if ground != *ground_c {
@@ -448,12 +425,14 @@ fn rotate_arms(
     }
 }
 
+// pour plus tard: peut être utilisé une courbe en parabole sans forcément mettre le haut de la parabole sur le panier et donc
+// obtenir un tir plus en cloche
 fn make_shoot(
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
     q_hoops: Query<&Transform, With<Hoop>>,
     mut q_ball: Query<(&Transform, &mut Velocity), With<Ball>>,
 ) {
-    if !keyboard_inputs.just_pressed(KeyCode::ArrowUp) {
+    if !keyboard_inputs.just_released(KeyCode::Space) {
         return;
     }
 
@@ -470,7 +449,7 @@ fn make_shoot(
     let direction = first_distance.normalize();
 
     // calculate the target position because if the player is too close to the hoop, the ball will be shooted from the side
-    let target_position = if first_distance.x.abs() < 150.0 {
+    let target_position = if first_distance.x.abs() < 200.0 {
         if direction.x > 0.0 {
             hoop.translation + Vec3::Y * 70.0 - Vec3::X * 20.0
         } else {
