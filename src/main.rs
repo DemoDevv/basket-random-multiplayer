@@ -184,7 +184,6 @@ fn setup_physics(
                         length: 40.0,
                     },
                     Collider::cuboid(7.0, 40.0),
-                    Sensor,
                     TransformBundle::from(Transform::from_xyz(0.0, -30.0, 0.0)),
                     ColliderMassProperties::Mass(0.0),
                 ))
@@ -393,7 +392,6 @@ fn jump_system(
     }
 }
 
-// FIXME: verifier le coté du bras avec le vec3 suivant la team des joueurs
 fn rotate_arms(
     time: Res<Time>,
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
