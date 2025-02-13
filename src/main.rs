@@ -5,8 +5,8 @@ use bevy::{
 use bevy_rapier2d::prelude::*;
 use iyes_perf_ui::{PerfUiCompleteBundle, PerfUiPlugin};
 
-const NUMBER_OF_TEAMS: i8 = 2; // if you set more than 2 teams, you will encounter some bugs with the spawn position of the players
-const NUMBER_OF_PLAYERS: i8 = 2;
+const NUMBER_OF_TEAMS: i8 = 1; // if you set more than 2 teams, you will encounter some bugs with the spawn position of the players
+const NUMBER_OF_PLAYERS: i8 = 1;
 
 const TARGET_ORIENTATION: f32 = 0.0;
 const K: f32 = 200_000_000.0;
@@ -201,8 +201,10 @@ fn setup_physics(
 
             let sensor = commands
                 .spawn((
+                    Hand,
                     Collider::ball(15.0),
                     Sensor,
+                    ActiveEvents::COLLISION_EVENTS,
                     ColliderMassProperties::Mass(0.0),
                     TransformBundle::from(Transform::from_xyz(0.0, -40.0, 0.0)),
                 ))
@@ -300,15 +302,44 @@ struct Arm {
 }
 
 #[derive(Debug, Component)]
+struct Hand;
+
+#[derive(Debug, Component)]
 struct Skeleton;
 
 #[derive(Debug, Component, Default)]
 struct IsOnGround(bool);
 
-fn detect_hand_collide_with_ball(mut collision_events: EventReader<CollisionEvent>) {
+fn detect_hand_collide_with_ball(
+    mut collision_events: EventReader<CollisionEvent>,
+    hands_q: Query<Entity, With<Hand>>,
+    balls_q: Query<Entity, With<Ball>>,
+) {
     for collision_event in collision_events.read() {
-        if let CollisionEvent::Started(hand, ball, _) = collision_event {
+        if let CollisionEvent::Started(hand_c, ball_c, _) = collision_event {
             // TODO: fix la balle au bras du joueur et en conséquence choisir le panier target du joueur
+            let hand = if hands_q.get(*hand_c).is_ok() {
+                Some(hand_c)
+            } else if hands_q.get(*ball_c).is_ok() {
+                Some(ball_c)
+            } else {
+                None
+            };
+
+            let ball = if balls_q.get(*hand_c).is_ok() {
+                Some(hand_c)
+            } else if balls_q.get(*ball_c).is_ok() {
+                Some(ball_c)
+            } else {
+                None
+            };
+
+            if let (Some(hand), Some(ball)) = (hand, ball) {
+                println!(
+                    "Collision entre une main {:?} et une balle {:?}",
+                    hand, ball
+                );
+            }
         }
     }
 }
