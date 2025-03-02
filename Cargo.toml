@@ -12,7 +12,3 @@ path = "src/main.rs"
 bevy = "0.13.2"
 bevy_rapier2d = { version = "0.26.0", features = ["debug-render-2d"] }
 iyes_perf_ui = "0.2.3"
-
-# [workspace]
-# members = ["crates/*"]
-# resolver = "2"
