@@ -4,6 +4,8 @@ use bevy::{
 };
 use bevy_rapier2d::prelude::*;
 
+use crate::game::ball::BallPossession;
+
 use super::{
     K, MAX_ANGLE_ROTATION_FOR_ARM, MIN_ANGLE_ROTATION_FOR_ARM, SPEED_ROTATION, TARGET_ORIENTATION,
     TORQUE_ON_COLLIDE,
@@ -15,24 +17,22 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                detect_player_collide_with_ground,
-                apply_torque,
-                jump_system,
-                rotate_arms,
-                detect_hand_collide_with_ball,
-            )
-                .chain(),
-        );
+        app.add_systems(Update, (apply_torque, jump_system, rotate_arms).chain())
+            .add_systems(
+                FixedUpdate,
+                (
+                    detect_player_collide_with_ground,
+                    detect_hand_collide_with_ball,
+                )
+                    .chain(),
+            );
     }
 }
 
-#[derive(Debug, Component)]
-struct Player;
+#[derive(Component)]
+pub struct Player;
 
-#[derive(Debug, Bundle)]
+#[derive(Bundle)]
 struct PlayerBundle {
     player: Player,
     rigid_bodie: RigidBody,
@@ -48,19 +48,16 @@ struct PlayerBundle {
     side: Side,
 }
 
-#[derive(Debug, Component)]
-struct Arm {
-    angle: f32,
-    length: f32,
-}
+#[derive(Component)]
+struct Arm;
 
-#[derive(Debug, Component)]
-struct Hand;
+#[derive(Component)]
+pub struct Hand;
 
-#[derive(Debug, Component)]
+#[derive(Component)]
 struct Skeleton;
 
-#[derive(Debug, Component, Default)]
+#[derive(Component, Default)]
 struct IsOnGround(bool);
 
 pub fn spawn_player(
@@ -120,10 +117,7 @@ pub fn spawn_player(
 
     let arm = commands
         .spawn((
-            Arm {
-                angle: 0.0,
-                length: 40.0,
-            },
+            Arm,
             Collider::cuboid(7.0, 40.0),
             TransformBundle::from(Transform::from_xyz(0.0, -30.0, 0.0)),
             ColliderMassProperties::Mass(0.0),
@@ -216,13 +210,14 @@ fn rotate_arms(
 }
 
 fn detect_hand_collide_with_ball(
+    mut commands: Commands,
+    keyboard_inputs: Res<ButtonInput<KeyCode>>,
     mut collision_events: EventReader<CollisionEvent>,
     hands_q: Query<Entity, With<Hand>>,
     balls_q: Query<Entity, With<Ball>>,
 ) {
     for collision_event in collision_events.read() {
         if let CollisionEvent::Started(hand_c, ball_c, _) = collision_event {
-            // TODO: fix la balle au bras du joueur et en conséquence choisir le panier target du joueur
             let hand = if hands_q.get(*hand_c).is_ok() {
                 Some(hand_c)
             } else if hands_q.get(*ball_c).is_ok() {
@@ -240,10 +235,14 @@ fn detect_hand_collide_with_ball(
             };
 
             if let (Some(hand), Some(ball)) = (hand, ball) {
-                println!(
-                    "Collision entre une main {:?} et une balle {:?}",
-                    hand, ball
-                );
+                if !keyboard_inputs.pressed(KeyCode::Space) {
+                    return;
+                }
+
+                commands
+                    .get_entity(*ball)
+                    .unwrap()
+                    .insert(BallPossession { user: *hand });
             }
         }
     }
