@@ -162,13 +162,10 @@ fn jump_system(
 ) {
     for (bodie, mut impulse, mut is_on_ground) in players.iter_mut() {
         let up_bodie_direction = bodie.rotation * Vec3::new(0.0, 0.1, 0.0);
-        let up_direction = Vec3::new(0.0, 0.1, 0.0);
-        let dot_product = up_bodie_direction.dot(up_direction);
-        let mag_up_bodie = up_bodie_direction.length();
-        let mag_up = up_direction.length();
-        let cos_theta = dot_product / (mag_up * mag_up_bodie);
-        let theta = cos_theta.acos();
-        let angle = theta.to_degrees();
+
+        let cos_theta = up_bodie_direction.y / up_bodie_direction.length();
+        let angle = cos_theta.acos().to_degrees();
+
         if keyboard_inputs.just_pressed(KeyCode::Space) && is_on_ground.0 && angle <= 80.0 {
             let up_direction_2d = Vec2::new(up_bodie_direction.x, up_bodie_direction.y);
 
