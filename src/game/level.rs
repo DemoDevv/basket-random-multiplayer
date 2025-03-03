@@ -50,7 +50,6 @@ fn setup_level(
         .spawn(Ground {
             collider: Collider::cuboid(500.0, 50.0),
             friction: Friction {
-                // FIXME: don't add friction with the ball
                 coefficient: 0.20,
                 combine_rule: CoefficientCombineRule::Min,
             },
