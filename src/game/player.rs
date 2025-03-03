@@ -213,16 +213,16 @@ fn detect_hand_collide_with_ball(
     mut commands: Commands,
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
     mut collision_events: EventReader<CollisionEvent>,
-    hands_q: Query<Entity, With<Hand>>,
-    balls_q: Query<Entity, With<Ball>>,
+    hands_q: Query<Entity, (With<Hand>, Without<Ball>)>,
+    balls_q: Query<Entity, (With<Ball>, Without<Hand>)>,
 ) {
     for collision_event in collision_events.read() {
         if let CollisionEvent::Started(hand_c, ball_c, _) = collision_event {
             let hand = hands_q.get(*hand_c).ok();
             let ball = balls_q.get(*ball_c).ok();
 
-            let hand_alt = balls_q.get(*ball_c).ok();
-            let ball_alt = hands_q.get(*hand_c).ok();
+            let hand_alt = balls_q.get(*hand_c).ok();
+            let ball_alt = hands_q.get(*ball_c).ok();
 
             if let Some(hand) = hand.or(hand_alt) {
                 if let Some(ball) = ball.or(ball_alt) {
@@ -232,6 +232,7 @@ fn detect_hand_collide_with_ball(
 
                     // Ajouter la possession de la balle
                     commands.entity(ball).insert(BallPossession { user: hand });
+                    commands.entity(ball).remove::<Collider>();
                 }
             }
         }
