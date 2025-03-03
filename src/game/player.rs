@@ -218,32 +218,21 @@ fn detect_hand_collide_with_ball(
 ) {
     for collision_event in collision_events.read() {
         if let CollisionEvent::Started(hand_c, ball_c, _) = collision_event {
-            let hand = if hands_q.get(*hand_c).is_ok() {
-                Some(hand_c)
-            } else if hands_q.get(*ball_c).is_ok() {
-                Some(ball_c)
-            } else {
-                None
-            };
+            let hand = hands_q.get(*hand_c).ok();
+            let ball = balls_q.get(*ball_c).ok();
 
-            let ball = if balls_q.get(*hand_c).is_ok() {
-                Some(hand_c)
-            } else if balls_q.get(*ball_c).is_ok() {
-                Some(ball_c)
-            } else {
-                None
-            };
+            let hand_alt = balls_q.get(*ball_c).ok();
+            let ball_alt = hands_q.get(*hand_c).ok();
 
-            if let (Some(hand), Some(ball)) = (hand, ball) {
-                if !keyboard_inputs.pressed(KeyCode::Space) {
-                    return;
+            if let Some(hand) = hand.or(hand_alt) {
+                if let Some(ball) = ball.or(ball_alt) {
+                    if !keyboard_inputs.pressed(KeyCode::Space) {
+                        return;
+                    }
+
+                    // Ajouter la possession de la balle
+                    commands.entity(ball).insert(BallPossession { user: hand });
                 }
-
-                commands
-                    .get_entity(*ball)
-                    .unwrap()
-                    .insert(BallPossession { user: *hand });
-                // commands.entity(*ball).remove::<RigidBody>();
             }
         }
     }
