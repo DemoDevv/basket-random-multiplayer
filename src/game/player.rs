@@ -4,6 +4,8 @@ use bevy::{
 };
 use bevy_rapier2d::prelude::*;
 
+use crate::game::ball::BallPossession;
+
 use super::{
     K, MAX_ANGLE_ROTATION_FOR_ARM, MIN_ANGLE_ROTATION_FOR_ARM, SPEED_ROTATION, TARGET_ORIENTATION,
     TORQUE_ON_COLLIDE,
@@ -16,12 +18,12 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Update,
+            FixedUpdate,
             (
-                detect_player_collide_with_ground,
                 apply_torque,
                 jump_system,
                 rotate_arms,
+                detect_player_collide_with_ground,
                 detect_hand_collide_with_ball,
             )
                 .chain(),
@@ -29,10 +31,10 @@ impl Plugin for PlayerPlugin {
     }
 }
 
-#[derive(Debug, Component)]
-struct Player;
+#[derive(Component)]
+pub struct Player;
 
-#[derive(Debug, Bundle)]
+#[derive(Bundle)]
 struct PlayerBundle {
     player: Player,
     rigid_bodie: RigidBody,
@@ -48,19 +50,16 @@ struct PlayerBundle {
     side: Side,
 }
 
-#[derive(Debug, Component)]
-struct Arm {
-    angle: f32,
-    length: f32,
-}
+#[derive(Component)]
+struct Arm;
 
-#[derive(Debug, Component)]
-struct Hand;
+#[derive(Component)]
+pub struct Hand;
 
-#[derive(Debug, Component)]
+#[derive(Component)]
 struct Skeleton;
 
-#[derive(Debug, Component, Default)]
+#[derive(Component, Default)]
 struct IsOnGround(bool);
 
 pub fn spawn_player(
@@ -120,10 +119,7 @@ pub fn spawn_player(
 
     let arm = commands
         .spawn((
-            Arm {
-                angle: 0.0,
-                length: 40.0,
-            },
+            Arm,
             Collider::cuboid(7.0, 40.0),
             TransformBundle::from(Transform::from_xyz(0.0, -30.0, 0.0)),
             ColliderMassProperties::Mass(0.0),
@@ -166,13 +162,10 @@ fn jump_system(
 ) {
     for (bodie, mut impulse, mut is_on_ground) in players.iter_mut() {
         let up_bodie_direction = bodie.rotation * Vec3::new(0.0, 0.1, 0.0);
-        let up_direction = Vec3::new(0.0, 0.1, 0.0);
-        let dot_product = up_bodie_direction.dot(up_direction);
-        let mag_up_bodie = up_bodie_direction.length();
-        let mag_up = up_direction.length();
-        let cos_theta = dot_product / (mag_up * mag_up_bodie);
-        let theta = cos_theta.acos();
-        let angle = theta.to_degrees();
+
+        let cos_theta = up_bodie_direction.y / up_bodie_direction.length();
+        let angle = cos_theta.acos().to_degrees();
+
         if keyboard_inputs.just_pressed(KeyCode::Space) && is_on_ground.0 && angle <= 80.0 {
             let up_direction_2d = Vec2::new(up_bodie_direction.x, up_bodie_direction.y);
 
@@ -187,63 +180,64 @@ fn jump_system(
 fn rotate_arms(
     time: Res<Time>,
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Transform, &Side), With<Skeleton>>,
+    mut skeletons: Query<(&mut Transform, &Side), With<Skeleton>>,
 ) {
-    for (mut transform, side) in query.iter_mut() {
-        let direction;
+    for (mut transform, side) in skeletons.iter_mut() {
+        let direction = match side {
+            Side::LEFT => 1.0,
+            Side::RIGHT => -1.0,
+        };
 
-        match side {
-            Side::LEFT => direction = 1.0,
-            Side::RIGHT => direction = -1.0,
+        let mut angle = transform
+            .rotation
+            .to_euler(EulerRot::XYZ)
+            .2
+            .to_degrees()
+            .abs();
+
+        let rotation_amount = SPEED_ROTATION * time.delta_seconds();
+
+        if keyboard_inputs.pressed(KeyCode::Space) {
+            angle = (angle + rotation_amount)
+                .clamp(MIN_ANGLE_ROTATION_FOR_ARM, MAX_ANGLE_ROTATION_FOR_ARM);
+        } else {
+            angle = (angle - rotation_amount)
+                .clamp(MIN_ANGLE_ROTATION_FOR_ARM, MAX_ANGLE_ROTATION_FOR_ARM);
         }
 
-        if keyboard_inputs.pressed(KeyCode::Space)
-            && transform.rotation.to_axis_angle().1.to_degrees() < MAX_ANGLE_ROTATION_FOR_ARM
-        {
-            // lever le bras
-            transform.rotate(Quat::from_rotation_z(
-                SPEED_ROTATION * time.delta_seconds() * direction,
-            ));
-        } else if !keyboard_inputs.pressed(KeyCode::Space)
-            && transform.rotation.to_axis_angle().1.to_degrees() > MIN_ANGLE_ROTATION_FOR_ARM
-        {
-            // baisser le bras
-            transform.rotate(Quat::from_rotation_z(
-                -SPEED_ROTATION * time.delta_seconds() * direction,
-            ));
-        }
+        transform.rotation = Quat::from_rotation_z((angle * direction).to_radians());
     }
 }
 
 fn detect_hand_collide_with_ball(
+    mut commands: Commands,
+    keyboard_inputs: Res<ButtonInput<KeyCode>>,
     mut collision_events: EventReader<CollisionEvent>,
-    hands_q: Query<Entity, With<Hand>>,
-    balls_q: Query<Entity, With<Ball>>,
+    hands_q: Query<Entity, (With<Hand>, Without<Ball>)>,
+    balls_q: Query<Entity, (With<Ball>, Without<Hand>)>,
 ) {
     for collision_event in collision_events.read() {
-        if let CollisionEvent::Started(hand_c, ball_c, _) = collision_event {
-            // TODO: fix la balle au bras du joueur et en conséquence choisir le panier target du joueur
-            let hand = if hands_q.get(*hand_c).is_ok() {
-                Some(hand_c)
-            } else if hands_q.get(*ball_c).is_ok() {
-                Some(ball_c)
-            } else {
-                None
-            };
+        if let CollisionEvent::Started(e1, e2, _) = collision_event {
+            if hands_q.contains(*e1) && hands_q.contains(*e2) {
+                return;
+            }
 
-            let ball = if balls_q.get(*hand_c).is_ok() {
-                Some(hand_c)
-            } else if balls_q.get(*ball_c).is_ok() {
-                Some(ball_c)
-            } else {
-                None
-            };
+            let hand = hands_q.get(*e1).ok();
+            let ball = balls_q.get(*e2).ok();
 
-            if let (Some(hand), Some(ball)) = (hand, ball) {
-                println!(
-                    "Collision entre une main {:?} et une balle {:?}",
-                    hand, ball
-                );
+            let hand_alt = balls_q.get(*e1).ok();
+            let ball_alt = hands_q.get(*e2).ok();
+
+            if let Some(hand) = hand.or(hand_alt) {
+                if let Some(ball) = ball.or(ball_alt) {
+                    if !keyboard_inputs.pressed(KeyCode::Space) {
+                        return;
+                    }
+
+                    // Ajouter la possession de la balle
+                    commands.entity(ball).insert(BallPossession { user: hand });
+                    commands.entity(ball).remove::<Collider>();
+                }
             }
         }
     }

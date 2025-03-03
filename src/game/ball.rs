@@ -4,19 +4,25 @@ use bevy::{
 };
 use bevy_rapier2d::prelude::*;
 
-use super::{level::Hoop, GameState, GRAVITE_SCALE_BALL};
+use super::{level::Hoop, player::Hand, GameState, GRAVITE_SCALE_BALL};
 
 pub struct BallPlugin;
 
 impl Plugin for BallPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Playing), setup_ball)
-            .add_systems(Update, make_shoot);
+            .add_systems(Update, make_shoot)
+            .add_systems(FixedUpdate, follow_hand);
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Component)]
 pub struct Ball;
+
+#[derive(Component)]
+pub struct BallPossession {
+    pub user: Entity,
+}
 
 fn setup_ball(
     mut commands: Commands,
@@ -30,30 +36,54 @@ fn setup_ball(
         .insert(Restitution::coefficient(1.1))
         .insert(GravityScale(GRAVITE_SCALE_BALL))
         .insert(Velocity::linear(Vec2::new(0.0, 0.0)))
+        .insert(ColliderMassProperties::Mass(1.0))
         .insert(MaterialMesh2dBundle {
             mesh: Mesh2dHandle(meshes.add(Circle { radius: 17.0 })),
             material: materials.add(Color::ORANGE),
             ..default()
         })
-        .insert(TransformBundle::from(Transform::from_xyz(0.0, 400.0, 0.0)));
+        .insert(TransformBundle::from(Transform::from_xyz(0.0, 400.0, 1.0)));
+}
+
+fn follow_hand(
+    mut q_ball: Query<(&mut Transform, Option<&BallPossession>), With<Ball>>,
+    q_players: Query<&GlobalTransform, (With<Hand>, Without<Ball>)>,
+) {
+    let (mut ball_transform, ball_possession) = q_ball.single_mut();
+    if let Some(ball_possession) = ball_possession {
+        let user = q_players.get(ball_possession.user).unwrap();
+        ball_transform.translation = user.compute_transform().translation;
+    }
 }
 
 fn make_shoot(
+    mut commands: Commands,
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
     q_hoops: Query<&Transform, With<Hoop>>,
-    mut q_ball: Query<(&Transform, &mut Velocity), With<Ball>>,
+    mut q_ball: Query<(Entity, &Transform, &mut Velocity, Option<&BallPossession>), With<Ball>>,
 ) {
     if !keyboard_inputs.just_released(KeyCode::Space) {
         return;
     }
 
-    // get the player and the hoop
-    let ball = q_ball.single().0;
+    let ball = q_ball.single();
+    let is_possessed = ball.3.is_some();
+
+    if !is_possessed {
+        return;
+    }
+
+    // remove the ball possession component
+    commands.entity(ball.0).remove::<BallPossession>();
+    commands.entity(ball.0).insert(Collider::ball(17.0));
+
+    // get the player transform and the hoop
+    let ball_transform = ball.1;
     let hoop = q_hoops.iter().next().unwrap();
 
     let first_distance = Vec2::new(
-        hoop.translation.x - ball.translation.x,
-        hoop.translation.y - ball.translation.y,
+        hoop.translation.x - ball_transform.translation.x,
+        hoop.translation.y - ball_transform.translation.y,
     );
 
     // use the direction of the first distance to know if the player is on the left or right of the hoop
@@ -72,8 +102,8 @@ fn make_shoot(
 
     // calculate the distance between the player and the hoop
     let distance = Vec2::new(
-        target_position.x - ball.translation.x,
-        target_position.y - ball.translation.y,
+        target_position.x - ball_transform.translation.x,
+        target_position.y - ball_transform.translation.y,
     );
 
     let dx = distance.x;
@@ -88,6 +118,6 @@ fn make_shoot(
         .sqrt()
         * 14.6;
 
-    let mut velocity = q_ball.single_mut().1;
+    let mut velocity = q_ball.single_mut().2;
     velocity.linvel = Vec2::new(speed * angle.cos(), speed * angle.sin());
 }
