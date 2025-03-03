@@ -17,15 +17,17 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (apply_torque, jump_system, rotate_arms).chain())
-            .add_systems(
-                FixedUpdate,
-                (
-                    detect_player_collide_with_ground,
-                    detect_hand_collide_with_ball,
-                )
-                    .chain(),
-            );
+        app.add_systems(
+            FixedUpdate,
+            (
+                apply_torque,
+                jump_system,
+                rotate_arms,
+                detect_player_collide_with_ground,
+                detect_hand_collide_with_ball,
+            )
+                .chain(),
+        );
     }
 }
 
@@ -181,31 +183,32 @@ fn jump_system(
 fn rotate_arms(
     time: Res<Time>,
     keyboard_inputs: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Transform, &Side), With<Skeleton>>,
+    mut skeletons: Query<(&mut Transform, &Side), With<Skeleton>>,
 ) {
-    for (mut transform, side) in query.iter_mut() {
-        let direction;
+    for (mut transform, side) in skeletons.iter_mut() {
+        let direction = match side {
+            Side::LEFT => 1.0,
+            Side::RIGHT => -1.0,
+        };
 
-        match side {
-            Side::LEFT => direction = 1.0,
-            Side::RIGHT => direction = -1.0,
+        let mut angle = transform
+            .rotation
+            .to_euler(EulerRot::XYZ)
+            .2
+            .to_degrees()
+            .abs();
+
+        let rotation_amount = SPEED_ROTATION * time.delta_seconds();
+
+        if keyboard_inputs.pressed(KeyCode::Space) {
+            angle = (angle + rotation_amount)
+                .clamp(MIN_ANGLE_ROTATION_FOR_ARM, MAX_ANGLE_ROTATION_FOR_ARM);
+        } else {
+            angle = (angle - rotation_amount)
+                .clamp(MIN_ANGLE_ROTATION_FOR_ARM, MAX_ANGLE_ROTATION_FOR_ARM);
         }
 
-        if keyboard_inputs.pressed(KeyCode::Space)
-            && transform.rotation.to_axis_angle().1.to_degrees() < MAX_ANGLE_ROTATION_FOR_ARM
-        {
-            // lever le bras
-            transform.rotate(Quat::from_rotation_z(
-                SPEED_ROTATION * time.delta_seconds() * direction,
-            ));
-        } else if !keyboard_inputs.pressed(KeyCode::Space)
-            && transform.rotation.to_axis_angle().1.to_degrees() > MIN_ANGLE_ROTATION_FOR_ARM
-        {
-            // baisser le bras
-            transform.rotate(Quat::from_rotation_z(
-                -SPEED_ROTATION * time.delta_seconds() * direction,
-            ));
-        }
+        transform.rotation = Quat::from_rotation_z((angle * direction).to_radians());
     }
 }
 
@@ -243,6 +246,7 @@ fn detect_hand_collide_with_ball(
                     .get_entity(*ball)
                     .unwrap()
                     .insert(BallPossession { user: *hand });
+                // commands.entity(*ball).remove::<RigidBody>();
             }
         }
     }
