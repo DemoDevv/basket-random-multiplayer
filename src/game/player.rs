@@ -217,12 +217,16 @@ fn detect_hand_collide_with_ball(
     balls_q: Query<Entity, (With<Ball>, Without<Hand>)>,
 ) {
     for collision_event in collision_events.read() {
-        if let CollisionEvent::Started(hand_c, ball_c, _) = collision_event {
-            let hand = hands_q.get(*hand_c).ok();
-            let ball = balls_q.get(*ball_c).ok();
+        if let CollisionEvent::Started(e1, e2, _) = collision_event {
+            if hands_q.contains(*e1) && hands_q.contains(*e2) {
+                return;
+            }
 
-            let hand_alt = balls_q.get(*hand_c).ok();
-            let ball_alt = hands_q.get(*ball_c).ok();
+            let hand = hands_q.get(*e1).ok();
+            let ball = balls_q.get(*e2).ok();
+
+            let hand_alt = balls_q.get(*e1).ok();
+            let ball_alt = hands_q.get(*e2).ok();
 
             if let Some(hand) = hand.or(hand_alt) {
                 if let Some(ball) = ball.or(ball_alt) {
