@@ -15,8 +15,8 @@ pub const TARGET_ORIENTATION: f32 = 0.0;
 pub const K: f32 = 200_000_000.0;
 pub const TORQUE_ON_COLLIDE: f32 = 30_000_000.0;
 pub const MAX_ANGLE_ROTATION_FOR_ARM: f32 = 155.0;
-pub const MIN_ANGLE_ROTATION_FOR_ARM: f32 = 1.0;
-pub const SPEED_ROTATION: f32 = 6.3;
+pub const MIN_ANGLE_ROTATION_FOR_ARM: f32 = 0.0;
+pub const SPEED_ROTATION: f32 = 300.0;
 pub const GRAVITE_SCALE_BALL: f32 = 0.4;
 
 pub struct GamePlugin;
@@ -73,7 +73,7 @@ fn spawn_teams(
         &mut materials,
         Side::LEFT,
         Color::BLUE,
-        1. * -150.,
+        2. * -150.,
     );
     spawn_player(
         &mut commands,
@@ -81,7 +81,7 @@ fn spawn_teams(
         &mut materials,
         Side::LEFT,
         Color::BLUE,
-        2. * -150.,
+        1. * -150.,
     );
 
     spawn_player(

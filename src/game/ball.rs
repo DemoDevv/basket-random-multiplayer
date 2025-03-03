@@ -36,6 +36,7 @@ fn setup_ball(
         .insert(Restitution::coefficient(1.1))
         .insert(GravityScale(GRAVITE_SCALE_BALL))
         .insert(Velocity::linear(Vec2::new(0.0, 0.0)))
+        .insert(ColliderMassProperties::Mass(1.0))
         .insert(MaterialMesh2dBundle {
             mesh: Mesh2dHandle(meshes.add(Circle { radius: 17.0 })),
             material: materials.add(Color::ORANGE),
@@ -74,6 +75,7 @@ fn make_shoot(
 
     // remove the ball possession component
     commands.entity(ball.0).remove::<BallPossession>();
+    commands.entity(ball.0).insert(Collider::ball(17.0));
 
     // get the player transform and the hoop
     let ball_transform = ball.1;
