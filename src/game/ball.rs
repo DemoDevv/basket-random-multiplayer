@@ -109,10 +109,11 @@ fn make_shoot(
     let dx = distance.x;
     let dy = distance.y;
 
+    // Calculate the angle between the current position and the target position. Adding FRAC_PI_4 to aim slightly above the target.
     let angle = dy.atan2(dx) / 2.0 + std::f32::consts::FRAC_PI_4;
     let tan_angle = angle.tan();
 
-    // calculate the speed of the ball with equation of motion
+    // calculate the speed (v0) of the ball with equation of motion (balistic). The factor 14,6 is a mystical constant, but it works.
     let speed = ((9.81 * GRAVITE_SCALE_BALL) * (dx).powi(2) * (tan_angle.powi(2) + 1.0)
         / (2.0 * (dx * tan_angle - dy)))
         .sqrt()
